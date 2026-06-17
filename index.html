@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AD Group Structure &amp; Zscaler Access Policies</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f5f4f0;
+      --color-border-tertiary: rgba(0,0,0,0.12);
+      --color-border-secondary: rgba(0,0,0,0.22);
+      --color-text-primary: #1a1a18;
+      --color-text-secondary: #5f5e5a;
+      --color-text-tertiary: #888780;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+      --border-radius-md: 8px;
+      --border-radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-background-primary: #1e1e1c;
+        --color-background-secondary: #2a2a28;
+        --color-border-tertiary: rgba(255,255,255,0.12);
+        --color-border-secondary: rgba(255,255,255,0.22);
+        --color-text-primary: #f0ede4;
+        --color-text-secondary: #b4b2a9;
+        --color-text-tertiary: #888780;
+      }
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      background: var(--color-background-secondary);
+      color: var(--color-text-primary);
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    .page { padding: 1rem 0 1.5rem; }
+
+    .section-label {
+      font-size: 11px; font-weight: 500; color: var(--color-text-tertiary);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px;
+    }
+
+    .wrap { display: inline-flex; gap: 16px; margin-bottom: 16px; }
+
+    .panel {
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-lg); padding: 14px 16px;
+      min-width: 360px;
+    }
+    .panel-title {
+      font-size: 11px; font-weight: 500; color: var(--color-text-tertiary);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px;
+    }
+
+    .tree ul { list-style: none; }
+    .tree li { margin: 0; padding: 0; }
+
+    .node-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 6px 5px 0; border-radius: 8px;
+      transition: background .15s; user-select: none; cursor: default;
+      white-space: nowrap;
+    }
+    .node-row.clickable { cursor: pointer; }
+    .node-row.clickable:hover { background: var(--color-background-secondary); }
+
+    .chevron {
+      display: flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; flex-shrink: 0;
+      transition: transform .2s ease; color: var(--color-text-tertiary);
+    }
+    .chevron svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .chevron.open   { transform: rotate(0deg); }
+    .chevron.closed { transform: rotate(-90deg); }
+    .chevron-placeholder { width: 18px; flex-shrink: 0; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 500; line-height: 1;
+      border: 0.5px solid transparent;
+      white-space: nowrap;
+    }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+    .pill.parent { background: #E6F1FB; border-color: #185FA5; color: #0C447C; }
+    .pill.parent .pill-dot { background: #185FA5; }
+    .pill.child  { background: #E1F5EE; border-color: #0F6E56; color: #085041; }
+    .pill.child .pill-dot  { background: #1D9E75; }
+    .pill.user   { background: #F1EFE8; border-color: #5F5E5A; color: #444441; }
+    .pill.user .pill-dot   { background: #888780; }
+
+    @media (prefers-color-scheme: dark) {
+      .pill.parent { background: #0C447C; border-color: #378ADD; color: #B5D4F4; }
+      .pill.parent .pill-dot { background: #85B7EB; }
+      .pill.child  { background: #085041; border-color: #1D9E75; color: #9FE1CB; }
+      .pill.child .pill-dot  { background: #5DCAA5; }
+      .pill.user   { background: #2C2C2A; border-color: #888780; color: #D3D1C7; }
+      .pill.user .pill-dot   { background: #B4B2A9; }
+    }
+
+    .children {
+      margin-left: 28px;
+      border-left: 1.5px solid var(--color-border-tertiary);
+      padding-left: 14px; overflow: hidden;
+      transition: max-height .25s ease, opacity .2s ease;
+    }
+    .children.open   { max-height: 800px; opacity: 1; }
+    .children.closed { max-height: 0; opacity: 0; }
+
+    .legend {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      padding: 10px 0 0; margin-bottom: 28px;
+      border-top: 0.5px solid var(--color-border-tertiary);
+      font-size: 12px; color: var(--color-text-secondary);
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot  { width: 7px; height: 7px; border-radius: 50%; }
+
+    .policies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    .policy-card {
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-lg); padding: 14px 16px;
+      transition: opacity .3s ease;
+    }
+    .policy-card.greyed { opacity: 0.35; }
+
+    .policy-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; gap: 8px;
+    }
+    .policy-name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); flex: 1; }
+
+    .toggle-wrap {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--color-text-tertiary);
+      cursor: pointer; user-select: none; flex-shrink: 0;
+    }
+    .toggle-track {
+      position: relative; width: 28px; height: 16px;
+      background: var(--color-border-secondary);
+      border-radius: 8px; transition: background .2s; flex-shrink: 0;
+    }
+    .toggle-track.on { background: #185FA5; }
+    .toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #fff; transition: transform .2s;
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(12px); }
+
+    .policy-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .policy-row:last-child { margin-bottom: 0; }
+
+    .policy-field-label {
+      font-size: 10px; font-weight: 500; color: var(--color-text-tertiary);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px;
+    }
+
+    .segment-name { font-size: 12px; color: var(--color-text-secondary); padding: 2px 0; }
+
+    .policy-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 8px;
+      font-size: 12px; font-weight: 500;
+      border: 0.5px solid transparent;
+      width: fit-content; max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .policy-chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+    .chip-domain { background: #FAEEDA; border-color: #854F0B; color: #633806; font-family: var(--font-mono); }
+    .chip-domain .policy-chip-dot { background: #BA7517; }
+
+    @media (prefers-color-scheme: dark) {
+      .chip-domain { background: #633806; border-color: #EF9F27; color: #FAC775; }
+      .chip-domain .policy-chip-dot { background: #EF9F27; }
+    }
+
+    .divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 10px 0; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="section-label">Group structure</div>
+  <div class="wrap">
+    <div class="panel">
+      <div class="panel-title">Flat group</div>
+      <div class="tree" id="tree-flat"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Nested groups</div>
+      <div class="tree" id="tree-nested"></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#185FA5"></span>Parent group</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>Child (nested) group</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#888780"></span>User account</span>
+  </div>
+
+  <div class="section-label">Zscaler access policies</div>
+  <div class="policies">
+
+    <div class="policy-card">
+      <div class="policy-header">
+        <div class="policy-name">Access to Soup</div>
+      </div>
+      <div class="policy-row">
+        <span class="policy-field-label">Application segment</span>
+        <span class="segment-name">Soup</span>
+        <span class="policy-chip chip-domain"><span class="policy-chip-dot"></span>soup.shopee.io</span>
+      </div>
+      <hr class="divider">
+      <div class="policy-row">
+        <span class="policy-field-label">AD group</span>
+        <div class="tree" id="ptree-1"></div>
+      </div>
+    </div>
+
+    <div class="policy-card">
+      <div class="policy-header">
+        <div class="policy-name">Access to Antifraud Admin</div>
+      </div>
+      <div class="policy-row">
+        <span class="policy-field-label">Application segment</span>
+        <span class="segment-name">Antifraud admin</span>
+        <span class="policy-chip chip-domain"><span class="policy-chip-dot"></span>antifraud.admin.shopee.io</span>
+      </div>
+      <hr class="divider">
+      <div class="policy-row">
+        <span class="policy-field-label">AD group</span>
+        <div class="tree" id="ptree-2"></div>
+      </div>
+    </div>
+
+    <div class="policy-card" id="policy-dep">
+      <div class="policy-header">
+        <div class="policy-name">Access to Soup Dependencies</div>
+        <div class="toggle-wrap" id="dep-toggle">
+          <div class="toggle-track on" id="dep-track"><div class="toggle-thumb"></div></div>
+          <span id="dep-label">On</span>
+        </div>
+      </div>
+      <div class="policy-row">
+        <span class="policy-field-label">Application segment</span>
+        <span class="segment-name">Soup</span>
+        <span class="policy-chip chip-domain"><span class="policy-chip-dot"></span>soup.shopee.io</span>
+      </div>
+      <hr class="divider">
+      <div class="policy-row">
+        <span class="policy-field-label">AD group</span>
+        <div class="tree" id="ptree-3"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let depEnabled = true;
+
+document.getElementById('dep-toggle').addEventListener('click', function() {
+  depEnabled = !depEnabled;
+  document.getElementById('policy-dep').classList.toggle('greyed', !depEnabled);
+  document.getElementById('dep-track').classList.toggle('on', depEnabled);
+  document.getElementById('dep-label').textContent = depEnabled ? 'On' : 'Off';
+});
+
+const flatData = {
+  id: 'soup', label: 'ZTNA-SG-Soup', kind: 'parent',
+  children: [
+    { id: 'u1', label: 'leejy@sea.com',   kind: 'user' },
+    { id: 'u2', label: 'wongryr@sea.com', kind: 'user' },
+    { id: 'u3', label: 'engtk@sea.com',   kind: 'user' },
+    { id: 'u4', label: 'limsk@sea.com',   kind: 'user' },
+  ]
+};
+const nestedData = {
+  id: 'soup-dep', label: 'ZTNA-SG-Soup_Dependencies', kind: 'parent',
+  children: [
+    {
+      id: 'antifraud', label: 'ZTNA-SG-Antifraud', kind: 'child',
+      children: [
+        { id: 'n-u1', label: 'leejy@sea.com',   kind: 'user' },
+        { id: 'n-u2', label: 'wongryr@sea.com', kind: 'user' },
+      ]
+    },
+    {
+      id: 'cmtadmin', label: 'ZTNA-SG-CMT_Admin', kind: 'child',
+      children: [
+        { id: 'n-u3', label: 'engtk@sea.com',  kind: 'user' },
+        { id: 'n-u4', label: 'limsk@sea.com',  kind: 'user' },
+      ]
+    }
+  ]
+};
+const policy1Data = {
+  id: 'p1-soup', label: 'ZTNA-SG-Soup', kind: 'parent',
+  children: [
+    { id: 'p1-u1', label: 'leejy@sea.com',   kind: 'user' },
+    { id: 'p1-u2', label: 'wongryr@sea.com', kind: 'user' },
+    { id: 'p1-u3', label: 'engtk@sea.com',   kind: 'user' },
+    { id: 'p1-u4', label: 'limsk@sea.com',   kind: 'user' },
+  ]
+};
+const policy2Data = {
+  id: 'p2-antifraud', label: 'ZTNA-SG-Antifraud', kind: 'child',
+  children: [
+    { id: 'p2-u1', label: 'leejy@sea.com',   kind: 'user' },
+    { id: 'p2-u2', label: 'wongryr@sea.com', kind: 'user' },
+  ]
+};
+const policy3Nodes = [
+  {
+    id: 'p3-soup-dep', label: 'ZTNA-SG-Soup_Dependencies', kind: 'parent',
+    children: [
+      {
+        id: 'p3-antifraud', label: 'ZTNA-SG-Antifraud', kind: 'child',
+        children: [
+          { id: 'p3-u1', label: 'leejy@sea.com',   kind: 'user' },
+          { id: 'p3-u2', label: 'wongryr@sea.com', kind: 'user' },
+        ]
+      },
+      {
+        id: 'p3-cmtadmin', label: 'ZTNA-SG-CMT_Admin', kind: 'child',
+        children: [
+          { id: 'p3-u3', label: 'engtk@sea.com',  kind: 'user' },
+          { id: 'p3-u4', label: 'limsk@sea.com',  kind: 'user' },
+        ]
+      }
+    ]
+  }
+];
+
+const state = {};
+function chevSVG() { return '<svg viewBox="0 0 16 16"><polyline points="4 6 8 10 12 6"/></svg>'; }
+
+function buildNode(node, policyNode) {
+  const hasChildren = node.children && node.children.length > 0;
+  const startOpen = !policyNode;
+  state[node.id] = startOpen;
+  const li = document.createElement('li');
+  const row = document.createElement('div');
+  row.className = 'node-row' + (hasChildren ? ' clickable' : '');
+  if (hasChildren) {
+    const ch = document.createElement('span');
+    ch.className = 'chevron ' + (startOpen ? 'open' : 'closed');
+    ch.id = 'chev-' + node.id;
+    ch.innerHTML = chevSVG();
+    row.appendChild(ch);
+  } else {
+    const ph = document.createElement('span');
+    ph.className = 'chevron-placeholder';
+    row.appendChild(ph);
+  }
+  const pill = document.createElement('span');
+  pill.className = 'pill ' + node.kind;
+  const dot = document.createElement('span');
+  dot.className = 'pill-dot';
+  pill.appendChild(dot);
+  pill.appendChild(document.createTextNode(node.label));
+  row.appendChild(pill);
+  li.appendChild(row);
+  if (hasChildren) {
+    const ul = document.createElement('ul');
+    const kids = document.createElement('div');
+    kids.className = 'children ' + (startOpen ? 'open' : 'closed');
+    kids.id = 'kids-' + node.id;
+    kids.appendChild(ul);
+    node.children.forEach(c => ul.appendChild(buildNode(c, policyNode)));
+    li.appendChild(kids);
+    row.addEventListener('click', () => {
+      state[node.id] = !state[node.id];
+      document.getElementById('chev-' + node.id).className = 'chevron ' + (state[node.id] ? 'open' : 'closed');
+      document.getElementById('kids-' + node.id).className = 'children ' + (state[node.id] ? 'open' : 'closed');
+    });
+  }
+  return li;
+}
+
+function mount(rootId, nodes, policyNode) {
+  const root = document.getElementById(rootId);
+  const ul = document.createElement('ul');
+  (Array.isArray(nodes) ? nodes : [nodes]).forEach(n => ul.appendChild(buildNode(n, policyNode)));
+  root.appendChild(ul);
+}
+
+mount('tree-flat',   flatData,     false);
+mount('tree-nested', nestedData,   false);
+mount('ptree-1',     policy1Data,  true);
+mount('ptree-2',     policy2Data,  true);
+mount('ptree-3',     policy3Nodes, true);
+</script>
+</body>
+</html>
